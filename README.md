@@ -9,23 +9,23 @@ This repository provides a Snakemake-based pipeline for processing eCLIP-seq dat
 
 ## Table of Contents
 
--   [Overview](#overview)
--   [Pipeline Steps](#pipeline-steps)
-    -   [Read Quality Control](#read-quality-control)
-    -   [CLIPper Analysis](#clipper-analysis)
-        -   [Generate Consensus Peaks](#generate-consensus-peaks)
-        -   [Count Reads in Consensus Peaks](#count-reads-in-consensus-peaks)
-    -   [pureCLIP Analysis](#pureclip-analysis)
-        -   [Additional Read Processing](#additional-read-processing)
-        -   [Generate Consensus Peaks](#generate-consensus-peaks-pureclip)
-        -   [Count Reads in Consensus Peaks](#count-reads-in-consensus-peaks-pureclip)
--   [Execution](#execution)
--   [Contributing](#contributing)
--   [License](#license)
+- [Overview](#overview)
+- [Pipeline Steps](#pipeline-steps)
+    - [Read Quality Control](#read-quality-control)
+    - [CLIPper Analysis](#clipper-analysis)
+        - [Generate Consensus Peaks](#generate-consensus-peaks)
+        - [Count Reads in Consensus Peaks](#count-reads-in-consensus-peaks)
+    - [pureCLIP Analysis](#pureclip-analysis)
+        - [Additional Read Processing](#additional-read-processing)
+        - [Generate Consensus Peaks (pureCLIP)](#generate-consensus-peaks-pureclip)
+        - [Count Reads in Consensus Peaks (pureCLIP)](#count-reads-in-consensus-peaks-pureclip)
+- [Execution](#execution)
+- [Contributing](#contributing)
+- [License](#license)
 
 ------------------------------------------------------------------------
 
-## Overview {#overview}
+## Overview
 
 This pipeline is designed to process eCLIP-seq data across multiple steps, including read quality control, peak calling with CLIPper and pureCLIP, and generating consensus peaks.
 
@@ -38,9 +38,9 @@ This pipeline is designed to process eCLIP-seq data across multiple steps, inclu
 
 ------------------------------------------------------------------------
 
-## Pipeline Steps {#pipeline-steps}
+## Pipeline Steps
 
-### Read Quality Control {#read-quality-control}
+### Read Quality Control
 
 ``` bash
 snakemake --google-lifesciences \
@@ -56,7 +56,7 @@ snakemake --google-lifesciences \
 
 ------------------------------------------------------------------------
 
-### CLIPper Analysis {#clipper-analysis}
+### CLIPper Analysis
 
 #### Run CLIPper for Each Sample
 
@@ -72,13 +72,13 @@ snakemake --google-lifesciences \
   -j 4
 ```
 
-#### Generate Consensus Peaks {#generate-consensus-peaks}
+#### Generate Consensus Peaks
 
 ``` bash
 Rscript ./02_CLIPper/functions/consensus_peaks.R
 ```
 
-#### Count Reads in Consensus Peaks {#count-reads-in-consensus-peaks}
+#### Count Reads in Consensus Peaks
 
 ``` bash
 snakemake --google-lifesciences \
@@ -94,9 +94,9 @@ snakemake --google-lifesciences \
 
 ------------------------------------------------------------------------
 
-### pureCLIP Analysis {#pureclip-analysis}
+### pureCLIP Analysis
 
-#### Additional Read Processing {#additional-read-processing}
+#### Additional Read Processing
 
 ``` bash
 snakemake --google-lifesciences \
@@ -124,13 +124,13 @@ snakemake --google-lifesciences \
   -j 4
 ```
 
-#### Generate Consensus Peaks (pureCLIP) {#generate-consensus-peaks-pureclip}
+#### Generate Consensus Peaks (pureCLIP)
 
 ``` bash
 Rscript ./03_pureCLIP/functions/consensus_peaks.R
 ```
 
-#### Count Reads in Consensus Peaks (pureCLIP) {#count-reads-in-consensus-peaks-pureclip}
+#### Count Reads in Consensus Peaks (pureCLIP)
 
 ``` bash
 snakemake --google-lifesciences \
@@ -146,7 +146,7 @@ snakemake --google-lifesciences \
 
 ------------------------------------------------------------------------
 
-## Execution {#execution}
+## Execution
 
 To execute the pipeline, ensure that you have all dependencies installed and configured. Modify paths and parameters in the respective `Snakefile` as necessary. Run each step sequentially using the commands provided in the corresponding sections.
 
