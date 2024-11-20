@@ -1,0 +1,38 @@
+configfile: "configs/config.yaml"
+
+from snakemake.remote.GS import RemoteProvider as GSRemoteProvider
+GS = GSRemoteProvider()
+
+rule all:
+    input:
+        expand(config["output_dir"]+"{iid}/pureclip_genome_exB2/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites_count.consensus.fisher.rds",  
+                      iid = config["iids"])
+
+rule peak_count:
+    input:
+        IP_STARTS = config["input_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.read_starts.bed",
+        INPUT_STARTS = config["input_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-INPUT.read_starts.bed",
+        INPUT_stats = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}_{config['seq_type']}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_stats.txt",
+        sample=config['iids'][wildcards.iid]['Input'],
+        bam_dir=config['iids'][wildcards.iid]['Input_bam_dir']),
+        IP_stats = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}_{config['seq_type']}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_stats.txt",
+        sample=config['iids'][wildcards.iid]['IP'],
+        bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        SITE_BED = config["output_dir"]+"consensus/consensus_peaks.bed",
+        Rscript = "functions/fisher_enrichment.R",
+    resources:
+        disk_mb=30000,
+        machine_type="c2",
+        mem_mb=20000
+    conda:
+        "environments/environment_pureclip_downstream.yaml",
+    output:
+        IP_OUT = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites_count.consensus.bed",
+        RDS_OUT = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites_count.consensus.fisher.rds",
+    shell:
+        """
+        bedtools intersect -a {input.SITE_BED} -b {input.IP_STARTS} -s -c > tmp.txt
+        bedtools intersect -a tmp.txt -b {input.INPUT_STARTS} -s -c > {output.IP_OUT}
+        Rscript --vanilla {input.Rscript} -i {output.IP_OUT} -s {input.INPUT_stats} -p {input.IP_stats} -b {output.BED_OUT} -r {output.RDS_OUT}
+        """      
+

@@ -1,0 +1,152 @@
+configfile: "configs/config.yaml"
+
+from snakemake.remote.GS import RemoteProvider as GSRemoteProvider
+GS = GSRemoteProvider()
+
+rule all:
+    input:
+        expand(config["output_dir"]+"{sample}/log/{sample}.rds",  
+                      sample = config["samples"]),
+                      
+rule cutumi:
+    input:
+        fastq1 = GS.remote(config["fastq_dir"]+"{sample}.fastq.gz"),
+    resources:
+        disk_mb=30000,
+        machine_type="c2"
+    conda:
+        "environments/environment.yaml"
+    output:
+        cutumi_log = config["output_dir"]+"{sample}/cutumi/{sample}.log",
+        cutumi_fastq1 = config["output_dir"]+"{sample}/cutumi/{sample}.demultiplex.fastq.gz",
+    shell:
+        "umi_tools extract --stdin={input.fastq1} --bc-pattern=NNNNNNNNNN --log={output.cutumi_log} --stdout {output.cutumi_fastq1}"
+
+rule cutadapt:
+    input:
+        fastq1=config["output_dir"]+"{sample}/cutumi/{sample}.demultiplex.fastq.gz",
+    resources:
+        disk_mb=30000,
+        machine_type="c2"
+    conda:
+        "environments/environment.yaml"
+    output:
+        cutadapt_fastq1 = config["output_dir"]+"{sample}/cutadapt/{sample}.demultiplex.adapterTrim.round2.fastq.gz",
+        cutadapt_metric1 = config["output_dir"]+"{sample}/cutadapt/{sample}.demultiplex.round1.metrics",
+        cutadapt_metric2 = config["output_dir"]+"{sample}/cutadapt/{sample}.demultiplex.round2.metrics",
+    shell:
+        """
+        cutadapt --match-read-wildcards --times 1 -e 0.1 -O 1 --quality-cutoff 6 -m 18 -a AGATCGGAAGAGCAC -a GATCGGAAGAGCACA -a ATCGGAAGAGCACAC -a TCGGAAGAGCACACG -a CGGAAGAGCACACGT -a GGAAGAGCACACGTC -a GAAGAGCACACGTCT -a AAGAGCACACGTCTG -a AGAGCACACGTCTGA -a GAGCACACGTCTGAA -a AGCACACGTCTGAAC -a GCACACGTCTGAACT -a CACACGTCTGAACTC -a ACACGTCTGAACTCC -a CACGTCTGAACTCCA -a ACGTCTGAACTCCAG -a CGTCTGAACTCCAGT -a GTCTGAACTCCAGTC -a TCTGAACTCCAGTCA -a CTGAACTCCAGTCAC -o processed.fastq.gz {input.fastq1} > {output.cutadapt_metric1}
+        cutadapt --match-read-wildcards --times 1 -e 0.1 -O 5 --quality-cutoff 6 -m 18 -a AGATCGGAAGAGCAC -a GATCGGAAGAGCACA -a ATCGGAAGAGCACAC -a TCGGAAGAGCACACG -a CGGAAGAGCACACGT -a GGAAGAGCACACGTC -a GAAGAGCACACGTCT -a AAGAGCACACGTCTG -a AGAGCACACGTCTGA -a GAGCACACGTCTGAA -a AGCACACGTCTGAAC -a GCACACGTCTGAACT -a CACACGTCTGAACTC -a ACACGTCTGAACTCC -a CACGTCTGAACTCCA -a ACGTCTGAACTCCAG -a CGTCTGAACTCCAGT -a GTCTGAACTCCAGTC -a TCTGAACTCCAGTCA -a CTGAACTCCAGTCAC -o {output.cutadapt_fastq1} processed.fastq.gz > {output.cutadapt_metric2}
+        """
+        
+rule star:
+    input:
+        fastq1=config["output_dir"]+"{sample}/cutadapt/{sample}.demultiplex.adapterTrim.round2.fastq.gz",
+        star_ref=GS.remote("pipeline_resources/GRCh38_GencodeV27_Primary.tar")
+    resources:
+        disk_mb=200000,
+        mem_mb=40000,
+        machine_type="c2"
+    conda:
+        "environments/environment_star.yaml"
+    output:
+        star_bam = config["output_dir"]+"{sample}/star/{sample}.demultiplex.Aligned.out.sorted.bam",
+        star_bai = config["output_dir"]+"{sample}/star/{sample}.demultiplex.Aligned.out.sorted.bam.bai",
+        star_log = config["output_dir"]+"{sample}/star/{sample}.demultiplex.Log.final.out"
+    shell:
+        """
+        tar -xf {input.star_ref} -C .
+        STAR --runMode alignReads --runThreadN 16 --genomeDir ./star --readFilesIn {input.fastq1} --readFilesCommand gunzip -c --twopassMode Basic --outSAMunmapped None --outFilterMultimapNmax 1 --outFilterMultimapScoreRange 1 --outSAMattributes All --outSAMtype BAM Unsorted --outFilterType BySJout --outReadsUnmapped Fastx --outFilterScoreMin 10 --outSAMattrRGline ID:foo --alignEndsType Extend5pOfRead1 --outFilterScoreMinOverLread 0.5 --outFilterMatchNminOverLread 0.5
+        samtools sort Aligned.out.bam -o {output.star_bam}
+        samtools index {output.star_bam} {output.star_bai}
+        cp Log.final.out {output.star_log}
+        """
+
+        
+rule dedup:
+    input:
+        BAM=config["output_dir"]+"{sample}/star/{sample}.demultiplex.Aligned.out.sorted.bam",
+        BAI=config["output_dir"]+"{sample}/star/{sample}.demultiplex.Aligned.out.sorted.bam.bai",
+    resources:
+        disk_mb=100000,
+        mem_mb=40000,
+        machine_type="c2"
+    conda:
+        "environments/environment.yaml"
+    output:
+        BAM_DEMUL = config["output_dir"]+"{sample}/dedup/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.bam",
+        BAI = config["output_dir"]+"{sample}/dedup/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.bam.bai",
+        DEMUL_LOG = config["output_dir"]+"{sample}/dedup/{sample}.demultiplex.Aligned.out.sorted.rmDup.log",
+    shell:
+        """
+        touch {input.BAI}
+        umi_tools dedup --method=unique -I {input.BAM} --log={output.DEMUL_LOG} -S temp.bam
+        samtools sort temp.bam -o {output.BAM_DEMUL}
+        samtools index {output.BAM_DEMUL} {output.BAI}
+        """
+        
+rule fillter_mapped:
+    input:
+        BAM=config["output_dir"]+"{sample}/dedup/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.bam",
+        GTF="pipeline_resources/gencode.v27.primary_assembly.annotation.RepeatMasker.gtf.gz"
+    resources:
+        disk_mb=30000,
+        machine_type="c2"
+    conda:
+        "environments/environment.yaml"
+    output:
+        COUNT = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.txt.gz",
+        SUMMARY = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.txt.summary.gz",
+        BAM_OUT = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam",
+        BAI_OUT = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam.bai"
+    params:
+        strand="-s 1",
+        BAM_name="{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.bam"
+    shell:
+        """
+        featureCounts {params.strand} -R BAM -C -a {input.GTF} -o count.txt {input.BAM} 
+        gzip -cvf count.txt > {output.COUNT}
+        gzip -cvf count.txt.summary > {output.SUMMARY}
+        samtools view -h  {params.BAM_name}.featureCounts.bam | grep -E ":ENSG|^@" | samtools view -bS > temp.bam
+        samtools sort temp.bam -o {output.BAM_OUT}
+        samtools index {output.BAM_OUT}
+        """
+        
+rule featureCounts_filtered:
+    input:
+        BAM=config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam",
+        GTF="pipeline_resources/gencode.v27.primary_assembly.annotation.RepeatMasker.gtf.gz",
+    resources:
+        disk_mb=30000,
+        machine_type="c2"
+    conda:
+        "environments/environment.yaml"
+    output:
+        COUNT = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.filtered.txt.gz",
+        SUMMARY = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.filtered.txt.summary.gz",
+    params:
+        strand="-s 1",
+    shell:
+        """
+        featureCounts {params.strand} -R BAM -C -a {input.GTF} -o count.txt {input.BAM} 
+        gzip -cvf count.txt > {output.COUNT}
+        gzip -cvf count.txt.summary > {output.SUMMARY}
+        """
+      
+rule agr_logs:
+    input:
+        SUMMARY = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.txt.summary.gz",
+        star_log = config["output_dir"]+"{sample}/star/{sample}.demultiplex.Log.final.out",
+        DEMUL_LOG = config["output_dir"]+"{sample}/dedup/{sample}.demultiplex.Aligned.out.sorted.rmDup.log",
+        Rscript = "functions/agr_logs_qc.R",
+    resources:
+        disk_mb=30000
+    conda:
+        "environments/environment_R.yaml"
+    output:
+        log = config["output_dir"]+"{sample}/log/{sample}.rds",
+    shell:
+        """
+        Rscript --vanilla {input.Rscript} --star_log {input.star_log} --dedup_log {input.DEMUL_LOG} --fillter_mapped_log {input.SUMMARY} --out_rds {output.log}
+        """

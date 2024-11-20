@@ -1,0 +1,15 @@
+fastq_dir: fastq/
+output_dir: process_reads/
+samples:
+  eCLIP_IP_S1: eCLIP_IP_S1
+  eCLIP_IP_S2: eCLIP_IP_S2
+  eCLIP_IP_S3: eCLIP_IP_S3
+  eCLIP_IP_S4: eCLIP_IP_S4
+  eCLIP_IP_S5: eCLIP_IP_S5
+  eCLIP_IP_S6: eCLIP_IP_S6
+  eCLIP_Input_S1: eCLIP_Input_S1
+  eCLIP_Input_S2: eCLIP_Input_S2
+  eCLIP_Input_S3: eCLIP_Input_S3
+  eCLIP_Input_S4: eCLIP_Input_S4
+  eCLIP_Input_S5: eCLIP_Input_S5
+  eCLIP_Input_S6: eCLIP_Input_S6

@@ -1,0 +1,89 @@
+
+configfile: "configs/config.yaml"
+
+from snakemake.remote.GS import RemoteProvider as GSRemoteProvider
+GS = GSRemoteProvider()
+
+rule all:
+    input:
+        expand(config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites.bed",  
+                      iid = config["iids"]),
+        expand(config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites_count.fisher.rds",  
+                      iid = config["iids"]),
+
+rule pureclip:
+    input:
+        IP_BAM = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam",
+        sample=config['iids'][wildcards.iid]['IP'],
+        bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        IP_BAI = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam.bai",
+        sample=config['iids'][wildcards.iid]['IP'],
+        bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        INPUT_BAM = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam",
+        sample=config['iids'][wildcards.iid]['Input'],
+        bam_dir=config['iids'][wildcards.iid]['Input_bam_dir']),
+        INPUT_BAI = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam.bai",
+        sample=config['iids'][wildcards.iid]['Input'],
+        bam_dir=config['iids'][wildcards.iid]['Input_bam_dir']),
+        GENOME = GS.remote("pipeline_resources/GRCh38.primary_assembly.genome.fa"),
+    resources:
+        disk_mb=30000,
+        machine_type="c2-standard-16"
+    conda:
+        "environments/environment_pureclip.yaml",
+    output:
+        BED_OUT = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites.bed",
+        PICKLE_OUT = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites.params",
+    shell:
+        """
+        touch {input.IP_BAI}
+        touch {input.INPUT_BAI}
+        pureclip -i {input.IP_BAM} -bai {input.IP_BAI} -g {input.GENOME} -nt 16 -o {output.BED_OUT} -ibam {input.INPUT_BAM} -ibai {input.INPUT_BAI}
+        """
+
+rule peak_count:
+    input:
+        IP_BAM = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam",
+        sample=config['iids'][wildcards.iid]['IP'],
+        bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        IP_BAI = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam.bai",
+        sample=config['iids'][wildcards.iid]['IP'],
+        bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        IP_stats = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_stats.txt",
+        sample=config['iids'][wildcards.iid]['IP'],
+        bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        INPUT_BAM = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam",
+        sample=config['iids'][wildcards.iid]['Input'],
+        bam_dir=config['iids'][wildcards.iid]['Input_bam_dir']),
+        INPUT_BAI = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam.bai",
+        sample=config['iids'][wildcards.iid]['Input'],
+        bam_dir=config['iids'][wildcards.iid]['Input_bam_dir']),
+        INPUT_stats = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_stats.txt",
+        sample=config['iids'][wildcards.iid]['Input'],
+        bam_dir=config['iids'][wildcards.iid]['Input_bam_dir']),
+        SITE_BED = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites.bed",
+        SCRIPT = "functions/get_read_starts.py",
+        Rscript = "functions/fisher_enrichment.R",
+    resources:
+        disk_mb=30000,
+        machine_type="c2"
+    conda:
+        "environments/environment_pureclip_downstream.yaml",
+    output:
+        IP_STARTS = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.read_starts.bed",
+        INPUT_STARTS = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-INPUT.read_starts.bed",
+        IP_OUT = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites_count.bed",
+        RDS_OUT = config["output_dir"]+"{iid}/demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.m6A-IP.crosslink_sites_count.fisher.rds",
+    shell:
+        """
+        awk  '{{if ( $2<0 ) {{print $1,0,1,$4,$5,$6,$7}} else {{print}}}}' OFS='\t' {input.SITE_BED}  > cr_sites.bed
+        bedtools bamtobed -i {input.IP_BAM} > m6A-IP.bed
+        bedtools bamtobed -i {input.INPUT_BAM} > m6A-INPUT.bed
+        python {input.SCRIPT} m6A-IP.bed {output.IP_STARTS}
+        python {input.SCRIPT} m6A-INPUT.bed {output.INPUT_STARTS}
+        bedtools intersect -a cr_sites.bed -b {output.IP_STARTS} -s -c > tmp.txt
+        bedtools intersect -a tmp.txt -b {output.INPUT_STARTS} -s -c > {output.IP_OUT}
+        
+        Rscript --vanilla {input.Rscript} -i {output.IP_OUT} -s {input.INPUT_stats} -p {input.IP_stats} -b {output.BED_OUT} -r {output.RDS_OUT}
+        """      
+

@@ -1,0 +1,36 @@
+configfile: "configs/config.yaml"
+
+from snakemake.remote.GS import RemoteProvider as GSRemoteProvider
+GS = GSRemoteProvider()
+
+rule all:
+    input:
+        expand(config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_stats.txt",
+                      sample = config["samples"])
+                      
+rule strip_mismatches:
+    input:
+        BAM = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam",
+        BAI = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam.bai",
+        PY1="functions/strip_mismatches.py",
+        PY2="functions/basic_seq_functions.py",
+    resources:
+        disk_mb=30000
+    conda:
+        "environments/environment_strip_mismatches.yaml"
+    output:
+        BAM_OUT = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam",
+        BAI_OUT = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.sorted.bam.bai",
+        STAT_OUT = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_stats.txt",
+        MIS_OUT = config["output_dir"]+"{sample}/fillter_mapped/{sample}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.stripped_5p_mismatches.txt",
+    shell:
+        """
+        python {input.PY1} --in_bam {input.BAM} --out_bam temp.bam --out_stats {output.STAT_OUT} --out_mismatches {output.MIS_OUT}
+        samtools sort temp.bam -o {output.BAM_OUT}
+        samtools index {output.BAM_OUT} {output.BAI_OUT}
+        """     
+        
+
+        
+        
+        

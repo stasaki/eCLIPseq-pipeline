@@ -1,0 +1,110 @@
+configfile: "configs/config.yaml"
+from snakemake.remote.GS import RemoteProvider as GSRemoteProvider
+GS = GSRemoteProvider()
+
+rule all:
+    input:
+        expand("{iid}/demultiplex.Aligned.out.sorted.clipper.fisher.rds",  
+                      iid = config["iids"]),
+                      
+rule clipper:
+    input:
+        BAM = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam",
+        sample=config['iids'][wildcards.iid]['IP'],
+        bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        BAI = lambda wildcards: expand(f"{{bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam.bai",
+        sample=config['iids'][wildcards.iid]['IP'],
+        bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        CLIP = "pipeline_resources/clipper/main.tar.gz"
+    resources:
+        disk_mb=30000,
+        machine_type="n2d-highcpu-224"
+    conda:
+        "environments/environment_clipper.yaml",
+    params:
+        clipper_ref=config["clipper_ref"],
+    output:
+        BED_OUT = "{iid}/demultiplex.Aligned.out.sorted.clipper.bed",
+        PICKLE_OUT = "{iid}/demultiplex.Aligned.out.sorted.clipper.bed.pickle",
+    shell:
+        """
+        python -m pip install {input.CLIP}
+        touch {input.BAI}
+        clipper -b {input.BAM} -s {params.clipper_ref} --premRNA False -o {output.BED_OUT} -v --save-pickle
+        """
+
+rule make_saf:
+    input:
+        BED = "{iid}/demultiplex.Aligned.out.sorted.clipper.bed",
+        REF = "pipeline_resources/expressed_genes.gtf",
+        Rscript = "functions/convert_clipper_bed_to_saf.R"
+    resources:
+        disk_mb=30000,
+    conda:
+        "environments/environment_clipper_peak_annotation.yaml",
+    output:
+        SAF_OUT = "{iid}/demultiplex.Aligned.out.sorted.clipper.saf"
+    log:
+        "logs/make_saf/{iid}.log"
+    shell:
+        """
+        Rscript --vanilla {input.Rscript} -b {input.BED} -r {input.REF} -p False -o {output.SAF_OUT} -g True
+        """
+        
+rule count_read:
+    input:
+        IP_BAM = lambda wildcards: expand(f"{{IP_bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam",
+        sample=config['iids'][wildcards.iid]['IP'],
+        IP_bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        IP_BAI = lambda wildcards: expand(f"{{IP_bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam.bai",
+        sample=config['iids'][wildcards.iid]['IP'],
+        IP_bam_dir=config['iids'][wildcards.iid]['IP_bam_dir']),
+        Input_BAM = lambda wildcards: expand(f"{{Input_bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam",
+        sample=config['iids'][wildcards.iid]['Input'],
+        Input_bam_dir=config['iids'][wildcards.iid]['Input_bam_dir']),
+        Input_BAI = lambda wildcards: expand(f"{{Input_bam_dir}}{{sample}}/fillter_mapped/{{sample}}.demultiplex.Aligned.out.sorted.rmDup.sorted.featureCounts.sorted.bam.bai",
+        sample=config['iids'][wildcards.iid]['Input'],
+        Input_bam_dir=config['iids'][wildcards.iid]['Input_bam_dir']),
+        SAF="{iid}/demultiplex.Aligned.out.sorted.clipper.saf",
+    resources:
+        disk_mb=30000
+    conda:
+        "environments/environment.yaml"
+    output:
+        IP_COUNT = "{iid}/demultiplex.Aligned.out.sorted.clipper.IP.txt.gz",
+        IP_SUMMARY = "{iid}/demultiplex.Aligned.out.sorted.clipper.IP.txt.summary.gz",
+        Input_COUNT = "{iid}/demultiplex.Aligned.out.sorted.clipper.Input.txt.gz",
+        Input_SUMMARY = "{iid}/demultiplex.Aligned.out.sorted.clipper.Input.txt.summary.gz",
+    params:
+        strand="-s 1",
+    log:
+        "logs/count_read/{iid}.log"
+    shell:
+        """
+        featureCounts {params.strand} -C -O -a {input.SAF} -F SAF -o IP.txt {input.IP_BAM} 
+        gzip -cvf IP.txt > {output.IP_COUNT}
+        gzip -cvf IP.txt.summary > {output.IP_SUMMARY}
+        
+        featureCounts {params.strand} -C -O -a {input.SAF} -F SAF -o Input.txt {input.Input_BAM} 
+        gzip -cvf Input.txt > {output.Input_COUNT}
+        gzip -cvf Input.txt.summary > {output.Input_SUMMARY}
+        """
+        
+rule fisher_test:
+    input:
+        IP_COUNT = "{iid}/demultiplex.Aligned.out.sorted.clipper.IP.txt.gz",
+        IP_SUMMARY = "{iid}/demultiplex.Aligned.out.sorted.clipper.IP.txt.summary.gz",
+        Input_COUNT = "{iid}/demultiplex.Aligned.out.sorted.clipper.Input.txt.gz",
+        Input_SUMMARY = "{iid}/demultiplex.Aligned.out.sorted.clipper.Input.txt.summary.gz",
+        Rscript = "functions/fisher_enrichment.R"
+    resources:
+        disk_mb=30000
+    conda:
+        "environments/environment_clipper_peak_annotation.yaml"
+    output:
+        RDS_OUT = "{iid}/demultiplex.Aligned.out.sorted.clipper.fisher.rds",
+        BED_OUT_FDR = "{iid}/demultiplex.Aligned.out.sorted.clipper.fdr.bed",
+    shell:
+        """
+        Rscript --vanilla {input.Rscript} -i {input.Input_COUNT} -s {input.Input_SUMMARY} -p {input.IP_COUNT} -m {input.IP_SUMMARY} -r {output.RDS_OUT} -f {output.BED_OUT_FDR}
+        """

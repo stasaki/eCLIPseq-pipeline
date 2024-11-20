@@ -1,0 +1,33 @@
+clipper_ref: ROSMAP
+minsample: min40ext
+iids:
+  clipper/Sample1:
+    IP: eCLIP_IP_S1
+    Input: eCLIP_Input_S1
+    IP_bam_dir: process_reads/
+    Input_bam_dir: process_reads/
+  clipper/Sample2:
+    IP: eCLIP_IP_S2
+    Input: eCLIP_Input_S2
+    IP_bam_dir: process_reads/
+    Input_bam_dir: process_reads/
+  clipper/Sample3:
+    IP: eCLIP_IP_S3
+    Input: eCLIP_Input_S3
+    IP_bam_dir: process_reads/
+    Input_bam_dir: process_reads/
+  clipper/Sample4:
+    IP: eCLIP_IP_S4
+    Input: eCLIP_Input_S4
+    IP_bam_dir: process_reads/
+    Input_bam_dir: process_reads/
+  clipper/Sample5:
+    IP: eCLIP_IP_S5
+    Input: eCLIP_Input_S5
+    IP_bam_dir: process_reads/
+    Input_bam_dir: process_reads/
+  clipper/Sample6:
+    IP: eCLIP_IP_S6
+    Input: eCLIP_Input_S6
+    IP_bam_dir: process_reads/
+    Input_bam_dir: process_reads/
